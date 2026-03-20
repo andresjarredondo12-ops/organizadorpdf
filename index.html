@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Renombrador de PDFs</title>
+
+<!-- PDF.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+
+<!-- JSZip -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<style>
+body {
+    font-family: Arial;
+    text-align: center;
+    padding: 30px;
+    background: #f5f5f5;
+}
+
+h1 {
+    color: #333;
+}
+
+input {
+    margin: 20px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+#log {
+    margin-top: 20px;
+    text-align: left;
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    max-width: 700px;
+    margin-left: auto;
+    margin-right: auto;
+    height: 300px;
+    overflow-y: auto;
+}
+</style>
+</head>
+
+<body>
+
+<h1>📦 Renombrador de PDFs por ID y Seguimiento</h1>
+
+<input type="file" id="folderInput" webkitdirectory multiple>
+<br>
+<button onclick="procesar()">Procesar PDFs</button>
+
+<div id="log"></div>
+
+<script>
+const log = (msg) => {
+    document.getElementById("log").innerHTML += msg + "<br>";
+};
+
+// Configurar PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+async function extraerTexto(file) {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+
+    let texto = "";
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const strings = content.items.map(item => item.str);
+        texto += strings.join(" ") + "\n";
+    }
+
+    return texto;
+}
+
+// 🔎 Ajustá estos patrones según tu PDF
+function extraerDatos(texto) {
+    let idMatch = texto.match(/ID[:\s]*([A-Z0-9\-]+)/i);
+    let trackMatch = texto.match(/(seguimiento|tracking|env[ií]o)[:\s]*([A-Z0-9\-]+)/i);
+
+    let id = idMatch ? idMatch[1] : "SIN_ID";
+    let track = trackMatch ? trackMatch[2] : "SIN_TRACK";
+
+    return { id, track };
+}
+
+async function procesar() {
+    const input = document.getElementById("folderInput");
+    const files = input.files;
+
+    if (!files.length) {
+        alert("Seleccioná una carpeta con PDFs");
+        return;
+    }
+
+    const zip = new JSZip();
+
+    for (let file of files) {
+        if (!file.name.toLowerCase().endsWith(".pdf")) continue;
+
+        log("📄 Procesando: " + file.name);
+
+        try {
+            const texto = await extraerTexto(file);
+            const datos = extraerDatos(texto);
+
+            const nuevoNombre = `${datos.id}_${datos.track}.pdf`;
+
+            zip.file(nuevoNombre, file);
+
+            log(`✅ ${file.name} → ${nuevoNombre}`);
+        } catch (error) {
+            log("❌ Error en " + file.name);
+            console.error(error);
+        }
+    }
+
+    log("📦 Generando ZIP...");
+
+    const contenido = await zip.generateAsync({ type: "blob" });
+
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(contenido);
+    a.download = "PDFs_Renombrados.zip";
+    a.click();
+
+    log("🎉 Listo!");
+}
+</script>
+
+</body>
+</html>
